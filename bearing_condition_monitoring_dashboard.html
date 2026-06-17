@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hydrostatic Bearing — Condition Monitoring Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root{
+  --bg:#f4f5f7;--surface:#ffffff;--surface2:#f8f9fb;--border:#e2e5ea;
+  --text:#1a1d23;--muted:#6b7280;--accent:#1D9E75;--accent2:#185FA5;
+  --warn:#BA7517;--danger:#A32D2D;--radius:10px;--font:'Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+/* --- top nav --- */
+.top-nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;gap:16px;height:56px;position:sticky;top:0;z-index:100}
+.top-nav .brand{font-size:15px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
+.top-nav .brand i{color:var(--accent);font-size:20px}
+.top-nav .status-pill{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 12px;border-radius:20px;background:#EAF3DE;color:#3B6D11;font-weight:500}
+.top-nav .status-pill .dot{width:7px;height:7px;border-radius:50%;background:#3B6D11;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* --- main layout --- */
+.layout{display:flex;flex:1;min-height:0}
+/* --- sidebar --- */
+.sidebar{width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border);padding:16px 0;display:flex;flex-direction:column;gap:2px}
+.sidebar-section{padding:8px 16px 4px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 16px;font-size:13px;color:var(--muted);cursor:pointer;border-radius:0;transition:all .15s;border-left:3px solid transparent}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:#EAF3DE;color:#3B6D11;border-left-color:#3B6D11;font-weight:500}
+.nav-item i{font-size:16px}
+/* --- content area --- */
+.content{flex:1;overflow-y:auto;padding:24px 28px}
+.page{display:none}.page.active{display:block}
+/* --- cards --- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.card-title{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.04em}
+/* --- grid helpers --- */
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+/* --- metric cards --- */
+.metric{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+.metric-label{font-size:12px;color:var(--muted);margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.metric-value{font-size:26px;font-weight:600;line-height:1}
+.metric-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.good{color:#0F6E56}.warn{color:#BA7517}.danger{color:#A32D2D}
+/* --- health gauge area --- */
+.health-ring{text-align:center;padding:20px 0}
+.health-pct{font-size:48px;font-weight:700;line-height:1}
+.health-label{font-size:13px;color:var(--muted);margin-top:4px}
+/* --- status badge --- */
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500}
+.badge-healthy{background:#EAF3DE;color:#3B6D11}
+.badge-warn{background:#FAEEDA;color:#854F0B}
+.badge-danger{background:#FCEBEB;color:#A32D2D}
+.badge-info{background:#E6F1FB;color:#185FA5}
+/* --- fault list --- */
+.fault-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.fault-item:last-child{border-bottom:none}
+.fault-name{font-size:13px;font-weight:500}
+.fault-sub{font-size:11px;color:var(--muted)}
+.severity-bar-wrap{display:flex;align-items:center;gap:8px}
+.severity-bar{height:6px;border-radius:3px;background:#e2e5ea;width:80px;overflow:hidden}
+.severity-fill{height:6px;border-radius:3px}
+/* --- table --- */
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{text-align:left;padding:9px 12px;border-bottom:2px solid var(--border);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.data-table td{padding:9px 12px;border-bottom:1px solid var(--border)}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:var(--surface2)}
+/* --- config page form --- */
+.form-row{display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.form-group{flex:1;min-width:180px}
+.form-label{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;text-transform:uppercase;letter-spacing:.04em}
+select,input[type=text],input[type=number]{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface2);color:var(--text);outline:none}
+select:focus,input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(29,158,117,.15)}
+.btn{padding:9px 20px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#0F6E56}
+.btn-secondary{background:var(--surface2);border:1px solid var(--border);color:var(--text)}.btn-secondary:hover{background:var(--border)}
+/* --- upload area --- */
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:36px;text-align:center;background:var(--surface2);cursor:pointer;transition:all .2s}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:#f0fdf8}
+.upload-zone i{font-size:36px;color:var(--muted);margin-bottom:10px}
+/* --- feature bar --- */
+.fi-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.fi-name{font-size:12px;color:var(--muted);min-width:120px}
+.fi-bar-bg{flex:1;height:7px;background:#e2e5ea;border-radius:4px;overflow:hidden}
+.fi-bar-fill{height:7px;border-radius:4px;background:var(--accent)}
+.fi-score{font-size:12px;font-weight:500;min-width:40px;text-align:right}
+/* --- report box --- */
+.report-section{border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:12px}
+.report-section h4{font-size:13px;font-weight:600;margin-bottom:8px}
+.report-kv{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)}
+.report-kv:last-child{border-bottom:none}
+/* --- maintenance recs --- */
+.rec-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;display:flex;gap:14px;align-items:flex-start}
+.rec-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px}
+.rec-icon.green{background:#EAF3DE;color:#3B6D11}
+.rec-icon.amber{background:#FAEEDA;color:#854F0B}
+.rec-icon.red{background:#FCEBEB;color:#A32D2D}
+.rec-title{font-size:13px;font-weight:600;margin-bottom:3px}
+.rec-body{font-size:12px;color:var(--muted);line-height:1.5}
+/* --- page header --- */
+.page-header{margin-bottom:20px}
+.page-header h2{font-size:20px;font-weight:600;margin-bottom:4px}
+.page-header p{font-size:13px;color:var(--muted)}
+/* AI chat box */
+.ai-box{background:#f0fdf8;border:1px solid #9FE1CB;border-radius:var(--radius);padding:14px 16px;margin-top:16px;font-size:13px;line-height:1.6}
+.ai-box .ai-header{font-size:11px;font-weight:600;color:#0F6E56;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:flex;align-items:center;gap:4px}
+.ai-input-row{display:flex;gap:8px;margin-top:14px}
+.ai-input-row input{flex:1;padding:8px 12px;border:1px solid #9FE1CB;border-radius:6px;font-size:13px;background:#fff;outline:none}
+.ai-input-row input:focus{border-color:var(--accent)}
+.spinner{display:none;width:16px;height:16px;border:2px solid #9FE1CB;border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+canvas{display:block}
+.chart-wrap{position:relative;width:100%}
+@media(max-width:900px){.grid-4{grid-template-columns:1fr 1fr}.grid-3{grid-template-columns:1fr 1fr}.sidebar{display:none}}
+</style>
+</head>
+<body>
+
+<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Hydrostatic journal bearing AI-based condition monitoring and predictive maintenance dashboard with signal analysis, ML fault detection, and maintenance recommendations.</h2>
+
+<!-- TOP NAV -->
+<nav class="top-nav">
+  <div class="brand"><i class="ti ti-rotate-clockwise-2" aria-hidden="true"></i> BearingIQ — Condition Monitor</div>
+  <span style="font-size:12px;color:var(--muted)">Water-Lubricated Hydrostatic Journal Bearing · VJTI / KPCL R&D</span>
+  <div class="status-pill"><span class="dot"></span>Live Monitoring</div>
+</nav>
+
+<div class="layout">
+<!-- SIDEBAR -->
+<nav class="sidebar" aria-label="Dashboard navigation">
+  <div class="sidebar-section">Overview</div>
+  <div class="nav-item active" onclick="showPage('overview',this)"><i class="ti ti-dashboard" aria-hidden="true"></i>Dashboard</div>
+  <div class="nav-item" onclick="showPage('config',this)"><i class="ti ti-settings" aria-hidden="true"></i>Configuration</div>
+  <div class="sidebar-section" style="margin-top:8px">Analysis</div>
+  <div class="nav-item" onclick="showPage('upload',this)"><i class="ti ti-upload" aria-hidden="true"></i>Data Upload</div>
+  <div class="nav-item" onclick="showPage('signals',this)"><i class="ti ti-wave-sine" aria-hidden="true"></i>Signal Analysis</div>
+  <div class="nav-item" onclick="showPage('features',this)"><i class="ti ti-chart-bar" aria-hidden="true"></i>Feature Extraction</div>
+  <div class="sidebar-section" style="margin-top:8px">Diagnostics</div>
+  <div class="nav-item" onclick="showPage('models',this)"><i class="ti ti-cpu" aria-hidden="true"></i>ML Performance</div>
+  <div class="nav-item" onclick="showPage('faults',this)"><i class="ti ti-alert-triangle" aria-hidden="true"></i>Fault Diagnosis</div>
+  <div class="sidebar-section" style="margin-top:8px">Output</div>
+  <div class="nav-item" onclick="showPage('maintenance',this)"><i class="ti ti-tool" aria-hidden="true"></i>Maintenance</div>
+  <div class="nav-item" onclick="showPage('report',this)"><i class="ti ti-file-text" aria-hidden="true"></i>Report</div>
+  <div class="nav-item" onclick="showPage('aiassist',this)"><i class="ti ti-sparkles" aria-hidden="true"></i>AI Assistant</div>
+</nav>
+
+<!-- CONTENT -->
+<main class="content" id="mainContent">
+
+<!-- ====== PAGE: OVERVIEW ====== -->
+<div class="page active" id="page-overview">
+  <div class="page-header">
+    <h2>System Overview</h2>
+    <p>Real-time condition summary — Hydrostatic Journal Bearing · 80×80 mm · Water Lubricated · 24-hole entry</p>
+  </div>
+  <div class="grid-4">
+    <div class="metric"><div class="metric-label"><i class="ti ti-activity" aria-hidden="true" style="font-size:14px"></i>Health Index</div><div class="metric-value good">87.4%</div><div class="metric-sub">↑ 2.1% from last run</div></div>
+    <div class="metric"><div class="metric-label"><i class="ti ti-gauge" aria-hidden="true" style="font-size:14px"></i>Max Pressure</div><div class="metric-value">13.04 bar</div><div class="metric-sub">Sensor P4 · Plane 1</div></div>
+    <div class="metric"><div class="metric-label"><i class="ti ti-rotate" aria-hidden="true" style="font-size:14px"></i>Speed</div><div class="metric-value">2000 rpm</div><div class="metric-sub">Operating speed</div></div>
+    <div class="metric"><div class="metric-label"><i class="ti ti-thermometer" aria-hidden="true" style="font-size:14px"></i>Temperature</div><div class="metric-value warn">42.3°C</div><div class="metric-sub">+4.3°C from baseline</div></div>
+  </div>
+  <div class="grid-4" style="margin-top:-6px">
+    <div class="metric"><div class="metric-label"><i class="ti ti-weight" aria-hidden="true" style="font-size:14px"></i>Applied Load</div><div class="metric-value">1000 N</div><div class="metric-sub">Radial · Self + ext.</div></div>
+    <div class="metric"><div class="metric-label"><i class="ti ti-wave-sine" aria-hidden="true" style="font-size:14px"></i>Vibration RMS</div><div class="metric-value warn">0.71 m/s²</div><div class="metric-sub">Ch2 dominant axis</div></div>
+    <div class="metric"><div class="metric-label"><i class="ti ti-droplets" aria-hidden="true" style="font-size:14px"></i>Flow Rate</div><div class="metric-value">10.1 LPM</div><div class="metric-sub">Supply: 6 bar</div></div>
+    <div class="metric"><div class="metric-label"><i class="ti ti-flame" aria-hidden="true" style="font-size:14px"></i>Wear Status</div><div class="metric-value danger">Detected</div><div class="metric-sub">Bush surface degraded</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-heart-rate-monitor" aria-hidden="true"></i>Health trend — last 20 windows</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="healthTrendChart" role="img" aria-label="Line chart of bearing health index over 20 windows, declining from 95% to 87%.">Health declining from 95% to 87% over 20 windows.</canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="ti ti-alert-circle" aria-hidden="true"></i>Active fault indicators</div>
+      <div class="fault-item"><div><div class="fault-name">Misalignment</div><div class="fault-sub">Pressure Δ 38% between planes</div></div><div class="severity-bar-wrap"><div class="severity-bar"><div class="severity-fill" style="width:72%;background:#E24B4A"></div></div><span class="badge badge-danger">High</span></div></div>
+      <div class="fault-item"><div><div class="fault-name">Bush Wear</div><div class="fault-sub">Pressure drop from 1304 → 330 kPa</div></div><div class="severity-bar-wrap"><div class="severity-bar"><div class="severity-fill" style="width:85%;background:#E24B4A"></div></div><span class="badge badge-danger">High</span></div></div>
+      <div class="fault-item"><div><div class="fault-name">Cavitation</div><div class="fault-sub">Air pockets at high speed</div></div><div class="severity-bar-wrap"><div class="severity-bar"><div class="severity-fill" style="width:50%;background:#EF9F27"></div></div><span class="badge badge-warn">Medium</span></div></div>
+      <div class="fault-item"><div><div class="fault-name">Lube Starvation</div><div class="fault-sub">Below 600 rpm film breakdown</div></div><div class="severity-bar-wrap"><div class="severity-bar"><div class="severity-fill" style="width:35%;background:#EF9F27"></div></div><span class="badge badge-warn">Low</span></div></div>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-gauge" aria-hidden="true"></i>Pressure profile — both planes</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="pressureProfileChart" role="img" aria-label="Line chart comparing pressure distribution across 15 sensor positions for Plane 1 and Plane 2 of the cylindrical bearing.">Plane 1 peaks at 1304 kPa; Plane 2 peaks at 832 kPa indicating misalignment.</canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="ti ti-chart-pie" aria-hidden="true"></i>ML model consensus</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="modelConsensusChart" role="img" aria-label="Doughnut chart showing 3 of 5 models predict Faulty and 2 predict Healthy for the current bearing state.">3 models predict faulty, 2 predict healthy — ensemble votes faulty.</canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== PAGE: CONFIG ====== -->
+<div class="page" id="page-config">
+  <div class="page-header"><h2>Machine Configuration</h2><p>Set operating parameters before data upload</p></div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title"><i class="ti ti-settings-2" aria-hidden="true"></i>Bearing &amp; machine parameters</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Bearing type</label><select><option>Hydrostatic Journal Bearing</option><option>Hydrodynamic Bearing</option><option>Rolling Element Bearing</option><option>Hybrid Bearing</option></select></div>
+      <div class="form-group"><label class="form-label">Lubrication</label><select><option>Water Lubricated</option><option>Oil Lubricated</option><option>ISO VG2 Oil</option><option>Grease Lubricated</option></select></div>
+      <div class="form-group"><label class="form-label">Machine type</label><select><option>Screw Compressor</option><option>Centrifugal Pump</option><option>Turbine</option><option>Motor</option><option>Generator</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Operating Speed (RPM)</label><input type="number" value="2000" min="100" max="5000"></div>
+      <div class="form-group"><label class="form-label">Applied Load (N)</label><input type="number" value="1000" min="0" max="5000"></div>
+      <div class="form-group"><label class="form-label">Supply Pressure (bar)</label><input type="number" value="6" min="1" max="30"></div>
+      <div class="form-group"><label class="form-label">Temperature (°C)</label><input type="number" value="30" min="10" max="120"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Bearing Diameter (mm)</label><input type="number" value="80"></div>
+      <div class="form-group"><label class="form-label">Bearing Length (mm)</label><input type="number" value="80"></div>
+      <div class="form-group"><label class="form-label">Radial Clearance (µm)</label><input type="number" value="50"></div>
+      <div class="form-group"><label class="form-label">Number of Holes</label><input type="number" value="24"></div>
+    </div>
+    <div class="card-title" style="margin-top:12px"><i class="ti ti-cpu" aria-hidden="true"></i>Sensor configuration</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <label style="font-size:13px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked> Vibration Sensor (3-axis)</label>
+      <label style="font-size:13px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked> Pressure Sensor (15 pts)</label>
+      <label style="font-size:13px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked> Temperature Sensor</label>
+      <label style="font-size:13px;display:flex;align-items:center;gap:5px"><input type="checkbox" checked> Load Cell</label>
+      <label style="font-size:13px;display:flex;align-items:center;gap:5px"><input type="checkbox"> Proximity Sensor (LVDT)</label>
+      <label style="font-size:13px;display:flex;align-items:center;gap:5px"><input type="checkbox"> Torque Sensor</label>
+    </div>
+    <div style="display:flex;gap:10px"><button class="btn btn-primary" onclick="alert('Configuration saved!')">Save Configuration</button><button class="btn btn-secondary">Reset Defaults</button></div>
+  </div>
+</div>
+
+<!-- ====== PAGE: UPLOAD ====== -->
+<div class="page" id="page-upload">
+  <div class="page-header"><h2>Data Upload</h2><p>Upload CSV, Excel, or sensor log files for processing</p></div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')">
+      <i class="ti ti-cloud-upload" aria-hidden="true" style="font-size:40px;color:var(--accent);display:block;margin-bottom:8px"></i>
+      <p style="font-weight:500;margin-bottom:4px">Drop files here or click to browse</p>
+      <p style="font-size:12px;color:var(--muted)">Supports: .csv · .xlsx · .mat · .daa · .dab · .txt</p>
+    </div>
+    <input type="file" id="fileInput" style="display:none" accept=".csv,.xlsx,.mat,.daa,.dab,.txt" onchange="handleUpload(this)">
+  </div>
+  <div class="card" id="dataPreviewCard">
+    <div class="card-title"><i class="ti ti-table" aria-hidden="true"></i>Dataset preview — H2O experimental data (loaded)</div>
+    <div class="grid-4" style="margin-bottom:16px">
+      <div class="metric"><div class="metric-label">Records</div><div class="metric-value">658</div><div class="metric-sub">segments @ Fs=512 Hz</div></div>
+      <div class="metric"><div class="metric-label">Features</div><div class="metric-value">36</div><div class="metric-sub">12 per channel × 3</div></div>
+      <div class="metric"><div class="metric-label">Missing Values</div><div class="metric-value good">0</div><div class="metric-sub">No gaps detected</div></div>
+      <div class="metric"><div class="metric-label">Outliers</div><div class="metric-value warn">14</div><div class="metric-sub">3-σ rule · flagged</div></div>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>File</th><th>Class</th><th>Segments</th><th>Speed (rpm)</th><th>Load (N)</th><th>Ps (bar)</th><th>RMS Ch1</th><th>RMS Ch2</th><th>Kurtosis Ch3</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>JBTR_Faulty_1.daa</td><td><span class="badge badge-danger">Faulty</span></td><td>110</td><td>2000</td><td>1000</td><td>6</td><td>0.702</td><td>0.714</td><td>3.21</td><td>✔</td></tr>
+        <tr><td>JBTR_Faulty_2.daa</td><td><span class="badge badge-danger">Faulty</span></td><td>108</td><td>2000</td><td>800</td><td>6</td><td>0.689</td><td>0.703</td><td>3.15</td><td>✔</td></tr>
+        <tr><td>JBTR_Faulty_3.daa</td><td><span class="badge badge-danger">Faulty</span></td><td>107</td><td>1500</td><td>500</td><td>8</td><td>0.697</td><td>0.709</td><td>2.97</td><td>✔</td></tr>
+        <tr><td>JBTR_Faulty_4.daa</td><td><span class="badge badge-danger">Faulty</span></td><td>108</td><td>2500</td><td>1000</td><td>10</td><td>0.876</td><td>0.887</td><td>4.12</td><td>✔</td></tr>
+        <tr><td>JBTR_Normal_1.daa</td><td><span class="badge badge-healthy">Normal</span></td><td>75</td><td>2000</td><td>200</td><td>6</td><td>0.017</td><td>0.018</td><td>2.84</td><td>✔</td></tr>
+        <tr><td>JBTR_Normal_2.daa</td><td><span class="badge badge-healthy">Normal</span></td><td>75</td><td>1200</td><td>400</td><td>8</td><td>0.021</td><td>0.022</td><td>2.71</td><td>✔</td></tr>
+        <tr><td>JBTR_Normal_3.daa</td><td><span class="badge badge-healthy">Normal</span></td><td>75</td><td>2400</td><td>500</td><td>10</td><td>0.881</td><td>0.886</td><td>2.88</td><td>✔</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ====== PAGE: SIGNALS ====== -->
+<div class="page" id="page-signals">
+  <div class="page-header"><h2>Signal Analysis</h2><p>Time-domain, frequency-domain, and time-frequency analysis</p></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-wave-sine" aria-hidden="true"></i>Time-domain — Channel 2 (dominant)</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="tdChart2" role="img" aria-label="Time-domain vibration signal comparison, normal vs faulty on Channel 2.">Normal near zero; faulty shows high amplitude oscillation.</canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="ti ti-chart-area" aria-hidden="true"></i>Power spectral density (Welch) — Ch2</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="psdChart2" role="img" aria-label="Power spectral density Welch method for normal and faulty conditions on Channel 2.">Faulty shows elevated power at 12 Hz and harmonics.</canvas></div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i>RMS amplitude per file — all channels</div>
+    <div class="chart-wrap" style="height:190px"><canvas id="rmsBarChart" role="img" aria-label="RMS amplitude per data file, color-coded red for faulty and green for normal.">Faulty files RMS 0.70–0.89 m/s²; normal files 0.018–0.022 m/s².</canvas></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-chart-dots" aria-hidden="true"></i>Kurtosis trend — fault indicator</div>
+      <div class="chart-wrap" style="height:180px"><canvas id="kurtChart" role="img" aria-label="Kurtosis trend chart across segments showing elevated values in faulty windows.">Kurtosis elevated to 4+ in faulty segments; baseline 2.7-3.0 normal.</canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="ti ti-waveform" aria-hidden="true"></i>Envelope spectrum — bearing fault frequencies</div>
+      <div class="chart-wrap" style="height:180px"><canvas id="envChart" role="img" aria-label="Envelope spectrum showing dominant frequency peaks at shaft frequency and harmonics in faulty bearing.">Dominant peak at 33 Hz (2000 rpm shaft) with sidebands.</canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== PAGE: FEATURES ====== -->
+<div class="page" id="page-features">
+  <div class="page-header"><h2>Feature Extraction</h2><p>36 features extracted: 12 time-domain + 12 frequency-domain per channel (3 channels)</p></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i>Top 15 features — ANOVA F-score</div>
+      <div id="featureImportanceContainer"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="ti ti-chart-pie" aria-hidden="true"></i>Feature category contribution</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="featCatChart2" role="img" aria-label="Doughnut chart: time-domain features contribute 55%, frequency-domain 45% to fault discrimination.">Time-domain 55%; frequency-domain 45%.</canvas></div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title"><i class="ti ti-histogram" aria-hidden="true"></i>RMS Ch2 — class distribution (normal vs faulty)</div>
+    <div class="chart-wrap" style="height:180px"><canvas id="distChart2" role="img" aria-label="Histogram of RMS Ch2 values for normal and faulty classes showing clear bimodal separation.">Normal class clusters near 0.02; faulty near 0.75 — strong separation.</canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-table" aria-hidden="true"></i>Extracted feature table — sample window</div>
+    <table class="data-table">
+      <thead><tr><th>Feature</th><th>Ch1</th><th>Ch2</th><th>Ch3</th><th>Physical meaning</th><th>Sensitivity</th></tr></thead>
+      <tbody>
+        <tr><td><strong>RMS</strong></td><td>0.702</td><td>0.714</td><td>0.709</td><td>Average energy level</td><td><span class="badge badge-danger">Very high</span></td></tr>
+        <tr><td><strong>Kurtosis</strong></td><td>3.21</td><td>3.15</td><td>2.97</td><td>Impulsive fault indicator</td><td><span class="badge badge-danger">Very high</span></td></tr>
+        <tr><td><strong>Crest Factor</strong></td><td>4.82</td><td>4.61</td><td>4.73</td><td>Peak-to-RMS ratio</td><td><span class="badge badge-warn">High</span></td></tr>
+        <tr><td><strong>Std Dev</strong></td><td>0.698</td><td>0.711</td><td>0.706</td><td>Spread of vibration</td><td><span class="badge badge-danger">Very high</span></td></tr>
+        <tr><td><strong>Mean Freq (MF)</strong></td><td>42.3</td><td>44.1</td><td>43.7</td><td>Centre of spectral mass</td><td><span class="badge badge-warn">High</span></td></tr>
+        <tr><td><strong>RMSF</strong></td><td>61.2</td><td>63.8</td><td>62.4</td><td>Spectral RMS frequency</td><td><span class="badge badge-warn">High</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ====== PAGE: ML MODELS ====== -->
+<div class="page" id="page-models">
+  <div class="page-header"><h2>ML Model Performance</h2><p>658 segments · 80/20 train-test split · 5-fold cross-validation</p></div>
+  <div class="grid-4" style="margin-bottom:16px">
+    <div class="metric"><div class="metric-label">Best accuracy</div><div class="metric-value good">100%</div><div class="metric-sub">ANN, SVM, RF</div></div>
+    <div class="metric"><div class="metric-label">Lowest accuracy</div><div class="metric-value warn">97.5%</div><div class="metric-sub">Decision Tree</div></div>
+    <div class="metric"><div class="metric-label">Total segments</div><div class="metric-value">658</div><div class="metric-sub">225 normal · 433 faulty</div></div>
+    <div class="metric"><div class="metric-label">Features / segment</div><div class="metric-value">36</div><div class="metric-sub">12 × 3 channels</div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title"><i class="ti ti-table" aria-hidden="true"></i>Model performance comparison</div>
+    <table class="data-table" id="mlTable"></table>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i>Accuracy comparison — CV vs Test</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="accChart2" role="img" aria-label="Grouped bar chart comparing cross-validation and test accuracy for ANN, SVM, KNN, Decision Tree, and Random Forest.">ANN SVM and RF achieve 100% test accuracy.</canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="ti ti-grid-4x4" aria-hidden="true"></i>Confusion matrix — ANN (best model)</div>
+      <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;font-size:12px;margin-top:8px;max-width:320px">
+        <div></div><div style="text-align:center;font-weight:600;color:var(--muted);padding:4px">Pred Normal</div><div style="text-align:center;font-weight:600;color:var(--muted);padding:4px">Pred Faulty</div>
+        <div style="font-weight:600;color:var(--muted);padding:4px;writing-mode:vertical-lr;text-align:center;transform:rotate(180deg);font-size:10px">Actual Normal</div><div style="background:#EAF3DE;color:#3B6D11;text-align:center;padding:14px;border-radius:6px;font-weight:600;font-size:16px">68<br><span style="font-size:10px;font-weight:400">TN</span></div><div style="background:#FCEBEB;color:#A32D2D;text-align:center;padding:14px;border-radius:6px;font-weight:600;font-size:16px">0<br><span style="font-size:10px;font-weight:400">FP</span></div>
+        <div style="font-weight:600;color:var(--muted);padding:4px;writing-mode:vertical-lr;text-align:center;transform:rotate(180deg);font-size:10px">Actual Faulty</div><div style="background:#FCEBEB;color:#A32D2D;text-align:center;padding:14px;border-radius:6px;font-weight:600;font-size:16px">0<br><span style="font-size:10px;font-weight:400">FN</span></div><div style="background:#EAF3DE;color:#3B6D11;text-align:center;padding:14px;border-radius:6px;font-weight:600;font-size:16px">130<br><span style="font-size:10px;font-weight:400">TP</span></div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-top:12px">Sensitivity = 1.000 | Specificity = 1.000 | F1 = 1.000</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i>Reference comparison — water vs oil-lubricated systems</div>
+    <div class="chart-wrap" style="height:200px"><canvas id="compareChart2" role="img" aria-label="Grouped bar chart comparing accuracy of ML models between reference oil-based paper and proposed water-lubricated framework.">Proposed water-lubricated framework matches or exceeds oil-based reference for all classifiers.</canvas></div>
+  </div>
+</div>
+
+<!-- ====== PAGE: FAULT DIAGNOSIS ====== -->
+<div class="page" id="page-faults">
+  <div class="page-header"><h2>Fault Diagnosis</h2><p>Automated fault identification with root cause analysis</p></div>
+  <div class="grid-3">
+    <div class="card"><div class="card-title"><i class="ti ti-alert-triangle" aria-hidden="true"></i>Detected faults</div>
+      <div class="fault-item"><div><div class="fault-name">Bearing Wear (Bush)</div><div class="fault-sub">Material removal on PTFE/carbon bush</div></div><span class="badge badge-danger">Critical</span></div>
+      <div class="fault-item"><div><div class="fault-name">Misalignment</div><div class="fault-sub">Δ38% pressure between planes</div></div><span class="badge badge-danger">High</span></div>
+      <div class="fault-item"><div><div class="fault-name">Cavitation</div><div class="fault-sub">Vapor pockets at speed &gt;2500 rpm</div></div><span class="badge badge-warn">Medium</span></div>
+      <div class="fault-item"><div><div class="fault-name">Lube Starvation</div><div class="fault-sub">Film breakdown below 600 rpm</div></div><span class="badge badge-warn">Medium</span></div>
+      <div class="fault-item"><div><div class="fault-name">Thermal Rise</div><div class="fault-sub">+4.3°C above design baseline</div></div><span class="badge badge-info">Low</span></div>
+    </div>
+    <div class="card"><div class="card-title"><i class="ti ti-search" aria-hidden="true"></i>Root cause analysis</div>
+      <p style="font-size:13px;line-height:1.6;color:var(--muted);margin-bottom:10px">Primary fault chain identified:</p>
+      <div style="font-size:12px;line-height:1.8">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="width:18px;height:18px;border-radius:50%;background:#FCEBEB;color:#A32D2D;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">1</span><span>Initial misalignment during first assembly</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="width:18px;height:18px;border-radius:50%;background:#FAEEDA;color:#854F0B;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">2</span><span>Uneven load → metal-to-metal contact</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="width:18px;height:18px;border-radius:50%;background:#FAEEDA;color:#854F0B;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">3</span><span>Bush surface degradation (carbon wear)</span></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="width:18px;height:18px;border-radius:50%;background:#FCEBEB;color:#A32D2D;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">4</span><span>Increased clearance → film collapse</span></div>
+        <div style="display:flex;align-items:center;gap:6px"><span style="width:18px;height:18px;border-radius:50%;background:#FCEBEB;color:#A32D2D;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">5</span><span>Pressure drop 1304 kPa → 330 kPa</span></div>
+      </div>
+    </div>
+    <div class="card"><div class="card-title"><i class="ti ti-clock" aria-hidden="true"></i>Remaining useful life estimate</div>
+      <div style="text-align:center;padding:16px 0">
+        <div style="font-size:42px;font-weight:700;color:var(--warn)">~14h</div>
+        <div style="font-size:13px;color:var(--muted);margin:4px 0 16px">at current operating conditions</div>
+        <div style="background:var(--surface2);border-radius:8px;padding:12px;font-size:12px;text-align:left">
+          <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:5px"><span style="color:var(--muted)">Confidence</span><span style="font-weight:500">73%</span></div>
+          <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:5px"><span style="color:var(--muted)">Risk level</span><span class="badge badge-danger" style="font-size:11px">High</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Model</span><span>Degradation rate + RF</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i>Pressure degradation — before vs after wear</div>
+    <div class="chart-wrap" style="height:220px"><canvas id="wearChart" role="img" aria-label="Grouped bar chart showing pressure at 7 sensor positions before and after wear, with significant drop post-wear.">Before wear peak 1304 kPa; after wear peak 330 kPa — 75% drop.</canvas></div>
+  </div>
+</div>
+
+<!-- ====== PAGE: MAINTENANCE ====== -->
+<div class="page" id="page-maintenance">
+  <div class="page-header"><h2>Predictive Maintenance</h2><p>AI-generated maintenance recommendations based on bearing health</p></div>
+  <div class="rec-card">
+    <div class="rec-icon red"><i class="ti ti-alert-triangle" aria-hidden="true"></i></div>
+    <div><div class="rec-title">Immediate: Replace bearing bush</div><div class="rec-body">Carbon/PTFE bush severely worn (pressure drop 75%). Transition to PTFE or PEEK-coated SS bush. Bearing cannot safely sustain operation above 600 rpm. Schedule replacement within next maintenance window — estimated ~14h of remaining life.</div></div>
+  </div>
+  <div class="rec-card">
+    <div class="rec-icon red"><i class="ti ti-adjustments-alt" aria-hidden="true"></i></div>
+    <div><div class="rec-title">Urgent: Correct shaft misalignment</div><div class="rec-body">38% pressure differential between Plane 1 (1304 kPa) and Plane 2 (832 kPa) confirms misalignment. Re-assemble bearing with precision alignment jigs. Verify concentricity using LVDT before restarting. Post-assembly: confirm symmetric pressure profile (Δ &lt; 5%).</div></div>
+  </div>
+  <div class="rec-card">
+    <div class="rec-icon amber"><i class="ti ti-droplets" aria-hidden="true"></i></div>
+    <div><div class="rec-title">Short-term: Upgrade to pocket-entry design</div><div class="rec-body">Current 24-hole orifice entry causes localized jetting and bush erosion. Transition to recessed pocket-entry bearing to distribute lubricant film uniformly, reduce starvation zones, and eliminate cavitation-induced wear at high speeds.</div></div>
+  </div>
+  <div class="rec-card">
+    <div class="rec-icon amber"><i class="ti ti-flask" aria-hidden="true"></i></div>
+    <div><div class="rec-title">Medium-term: Evaluate water additives</div><div class="rec-body">Pure distilled water shows low viscosity limitations (0.65 cSt vs VG2 at 2.2 cSt). Introduce anti-corrosion agents, surfactants, and viscosity-enhancing additives to improve film stability, reduce cavitation risk, and protect SS304 surfaces from water corrosion.</div></div>
+  </div>
+  <div class="rec-card">
+    <div class="rec-icon green"><i class="ti ti-shield-check" aria-hidden="true"></i></div>
+    <div><div class="rec-title">Long-term: Advanced surface coatings</div><div class="rec-body">Apply PEEK coating on SS304 bearing liner — similar tribological properties to carbon bush with higher durability. Consider DLC (diamond-like carbon) or graphene-oxide coatings for ultra-low friction in water-lubricated environments per Kim et al. (2015).</div></div>
+  </div>
+  <div class="card" style="margin-top:4px">
+    <div class="card-title"><i class="ti ti-calendar" aria-hidden="true"></i>Maintenance schedule</div>
+    <table class="data-table">
+      <thead><tr><th>Priority</th><th>Action</th><th>Target</th><th>Urgency</th><th>Est. Downtime</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge badge-danger">P1</span></td><td>Replace carbon bush with PTFE/PEEK</td><td>Immediate</td><td>Critical</td><td>4–6 h</td></tr>
+        <tr><td><span class="badge badge-danger">P2</span></td><td>Precision shaft realignment</td><td>&lt; 24 h</td><td>High</td><td>2–3 h</td></tr>
+        <tr><td><span class="badge badge-warn">P3</span></td><td>Pocket-entry bearing redesign</td><td>Next prototype</td><td>Medium</td><td>Design phase</td></tr>
+        <tr><td><span class="badge badge-warn">P4</span></td><td>Water additive formulation</td><td>2–4 weeks</td><td>Medium</td><td>Lab testing</td></tr>
+        <tr><td><span class="badge badge-info">P5</span></td><td>PEEK / DLC coating trial</td><td>1–2 months</td><td>Low</td><td>R&D cycle</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ====== PAGE: REPORT ====== -->
+<div class="page" id="page-report">
+  <div class="page-header"><h2>Automated Report</h2><p>Generated: June 2025 · VJTI Tribology Lab · KPCL R&D Project</p></div>
+  <div style="display:flex;gap:10px;margin-bottom:16px">
+    <button class="btn btn-primary" onclick="alert('Generating PDF report...')"><i class="ti ti-file-type-pdf" aria-hidden="true" style="margin-right:4px"></i>Export PDF</button>
+    <button class="btn btn-secondary" onclick="alert('Generating Excel report...')"><i class="ti ti-file-type-xls" aria-hidden="true" style="margin-right:4px"></i>Export Excel</button>
+    <button class="btn btn-secondary" onclick="alert('Generating Word document...')"><i class="ti ti-file-type-doc" aria-hidden="true" style="margin-right:4px"></i>Export Word</button>
+  </div>
+  <div class="report-section"><h4>1. Machine &amp; Bearing Information</h4>
+    <div class="report-kv"><span>Institution</span><span>VJTI, Mumbai — Tribology Lab, Mech. Dept.</span></div>
+    <div class="report-kv"><span>Project</span><span>KPCL / MHI Samriddhi (IISc coordination)</span></div>
+    <div class="report-kv"><span>Bearing type</span><span>Hydrostatic Hole-Entry Cylindrical Journal Bearing</span></div>
+    <div class="report-kv"><span>Dimensions</span><span>Ø80 × 80 mm (L/D = 1)</span></div>
+    <div class="report-kv"><span>Lubricant</span><span>Distilled water (μ = 0.001 Pa·s)</span></div>
+    <div class="report-kv"><span>Supply pressure</span><span>6–12 bar</span></div>
+    <div class="report-kv"><span>Speed range</span><span>300–2500 rpm</span></div>
+  </div>
+  <div class="report-section"><h4>2. Data Summary</h4>
+    <div class="report-kv"><span>Total segments</span><span>658 (225 Normal · 433 Faulty)</span></div>
+    <div class="report-kv"><span>Sampling rate</span><span>512 Hz</span></div>
+    <div class="report-kv"><span>Window size</span><span>1 s (512 samples)</span></div>
+    <div class="report-kv"><span>Features extracted</span><span>36 (12 time + 12 freq per channel × 3 axes)</span></div>
+  </div>
+  <div class="report-section"><h4>3. ML Prediction Results</h4>
+    <div class="report-kv"><span>Best model</span><span>ANN / SVM / RF — 100% test accuracy</span></div>
+    <div class="report-kv"><span>Ensemble verdict</span><span><strong>FAULTY</strong> (3 of 5 models)</span></div>
+    <div class="report-kv"><span>Failure probability</span><span>78.4%</span></div>
+    <div class="report-kv"><span>Remaining useful life</span><span>~14 hours at current conditions</span></div>
+  </div>
+  <div class="report-section"><h4>4. Fault Diagnosis</h4>
+    <div class="report-kv"><span>Primary fault</span><span>Bearing wear — bush material removal</span></div>
+    <div class="report-kv"><span>Secondary fault</span><span>Shaft misalignment — 38% pressure asymmetry</span></div>
+    <div class="report-kv"><span>Contributing factors</span><span>Cavitation, lube starvation, thermal rise</span></div>
+    <div class="report-kv"><span>Evidence</span><span>Pressure: 1304 kPa → 330 kPa post-wear; carbon particles collected</span></div>
+  </div>
+  <div class="report-section"><h4>5. Recommendations</h4>
+    <div class="report-kv"><span>Immediate</span><span>Replace bush · correct alignment (P1–P2)</span></div>
+    <div class="report-kv"><span>Short-term</span><span>Pocket-entry redesign · water additives (P3–P4)</span></div>
+    <div class="report-kv"><span>Long-term</span><span>PEEK / DLC surface coatings (P5)</span></div>
+    <div class="report-kv"><span>Operating limit</span><span>Do not run below 600 rpm — film breakdown confirmed</span></div>
+  </div>
+</div>
+
+<!-- ====== PAGE: AI ASSISTANT ====== -->
+<div class="page" id="page-aiassist">
+  <div class="page-header"><h2>AI Diagnostic Assistant</h2><p>Powered by Claude — ask engineering questions about this bearing system</p></div>
+  <div class="card">
+    <div class="card-title"><i class="ti ti-sparkles" aria-hidden="true"></i>Ask the AI engineer</div>
+    <div id="chatHistory" style="min-height:120px;max-height:400px;overflow-y:auto;margin-bottom:12px;display:flex;flex-direction:column;gap:10px"></div>
+    <div style="display:flex;gap:8px">
+      <input type="text" id="aiQuestion" placeholder="e.g. Why did pressure drop after wear? What SHAP features indicate misalignment?" style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px" onkeydown="if(event.key==='Enter')askAI()">
+      <button class="btn btn-primary" onclick="askAI()" style="display:flex;align-items:center;gap:6px"><div class="spinner" id="aiSpinner"></div><i class="ti ti-send" aria-hidden="true"></i>Ask</button>
+    </div>
+    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">
+      <button class="btn btn-secondary" style="font-size:11px;padding:5px 10px" onclick="document.getElementById('aiQuestion').value='Explain why pressure dropped from 1304 kPa to 330 kPa after wear';askAI()">Pressure drop after wear?</button>
+      <button class="btn btn-secondary" style="font-size:11px;padding:5px 10px" onclick="document.getElementById('aiQuestion').value='What does a Kurtosis of 4.1 indicate for a water-lubricated hydrostatic bearing?';askAI()">Kurtosis = 4.1 meaning?</button>
+      <button class="btn btn-secondary" style="font-size:11px;padding:5px 10px" onclick="document.getElementById('aiQuestion').value='Why is the minimum speed 600 rpm for stable water film?';askAI()">Minimum 600 rpm speed?</button>
+      <button class="btn btn-secondary" style="font-size:11px;padding:5px 10px" onclick="document.getElementById('aiQuestion').value='Compare PTFE vs PEEK bush material for water-lubricated bearings';askAI()">PTFE vs PEEK bush?</button>
+    </div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+function showPage(id, el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  el.classList.add('active');
+}
+
+function handleUpload(input){
+  if(input.files.length>0){
+    alert('File "'+input.files[0].name+'" uploaded successfully.\nProcessing pipeline started: data cleaning → feature extraction → ML inference...');
+  }
+}
+
+/* ---- Chart colour helpers ---- */
+const GR='#1D9E75',GR2='#9FE1CB',RD='#E24B4A',BL='#378ADD',AM='#EF9F27',MU='#888780';
+const isDark=matchMedia('(prefers-color-scheme:dark)').matches;
+const gridC=isDark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.06)';
+const textC=isDark?'#aaa':'#6b7280';
+const base={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:11}}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:11}}}}};
+
+/* ---- Health trend ---- */
+(function(){
+  const labels=[...Array(20)].map((_,i)=>'W'+(i+1));
+  const vals=[95,94,93,94,92,91,90,91,89,88,90,87,86,88,87,85,86,87,86,87];
+  new Chart(document.getElementById('healthTrendChart'),{type:'line',data:{labels,datasets:[{data:vals,borderColor:GR,borderWidth:2,pointRadius:0,fill:true,backgroundColor:'rgba(29,158,117,0.08)',tension:0.4}]},options:{...base,scales:{x:{...base.scales.x},y:{...base.scales.y,min:80,max:100,title:{display:true,text:'Health %',color:textC,font:{size:11}}}}}});
+})();
+
+/* ---- Pressure profile ---- */
+(function(){
+  const labels=['P1','P2','P3','P4','P5','P6','P7','P8','P9','P10','P11','P12','P13','P14','P15'];
+  const p1=[24,157,659,822,700,500,300,100,24,0,0,0,0,0,0];
+  const p2=[0,65,832,1304,1000,700,400,200,103,0,0,0,0,0,0];
+  new Chart(document.getElementById('pressureProfileChart'),{type:'line',data:{labels,datasets:[{label:'Plane 1',data:p1,borderColor:BL,borderWidth:2,pointRadius:3,fill:false,tension:0.3},{label:'Plane 2',data:p2,borderColor:GR,borderWidth:2,pointRadius:3,fill:false,tension:0.3}]},options:{...base,plugins:{legend:{display:true,position:'top',labels:{color:textC,font:{size:11},boxWidth:10}}},scales:{x:{...base.scales.x},y:{...base.scales.y,title:{display:true,text:'Pressure (kPa)',color:textC,font:{size:11}}}}}});
+})();
+
+/* ---- Model consensus doughnut ---- */
+(function(){
+  new Chart(document.getElementById('modelConsensusChart'),{type:'doughnut',data:{labels:['Faulty (3 models)','Healthy (2 models)'],datasets:[{data:[3,2],backgroundColor:[RD,GR],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{display:true,position:'bottom',labels:{color:textC,font:{size:11},boxWidth:10,padding:10}}}}});
+})();
+
+/* ---- Time domain chart ---- */
+(function(){
+  const t=[...Array(200)].map((_,i)=>+(i/512).toFixed(3));
+  const nSig=t.map(()=>(Math.random()-.5)*0.06);
+  const fSig=t.map((_,i)=>(Math.random()-.5)*1.8+0.15*Math.sin(2*Math.PI*12*i/512));
+  new Chart(document.getElementById('tdChart2'),{type:'line',data:{labels:t,datasets:[{label:'Normal',data:nSig,borderColor:GR,borderWidth:1,pointRadius:0,tension:0.2},{label:'Faulty',data:fSig,borderColor:RD,borderWidth:1,pointRadius:0,tension:0.2}]},options:{...base,plugins:{legend:{display:true,position:'top',labels:{color:textC,font:{size:11},boxWidth:8}}},scales:{x:{...base.scales.x,title:{display:true,text:'Time (s)',color:textC,font:{size:11}}},y:{...base.scales.y,title:{display:true,text:'Accel (m/s²)',color:textC,font:{size:11}}}}}});
+})();
+
+/* ---- PSD chart ---- */
+(function(){
+  const f=[...Array(129)].map((_,i)=>i*2);
+  const nP=f.map(fr=>10*Math.log10(0.001*Math.exp(-fr/30)+1e-12+Math.random()*.00005));
+  const fP=f.map(fr=>10*Math.log10(0.5*Math.exp(-fr/25)+Math.random()*.015+1e-6));
+  new Chart(document.getElementById('psdChart2'),{type:'line',data:{labels:f,datasets:[{label:'Normal',data:nP,borderColor:GR,borderWidth:1.5,pointRadius:0,fill:false},{label:'Faulty',data:fP,borderColor:RD,borderWidth:1.5,pointRadius:0,fill:false}]},options:{...base,plugins:{legend:{display:true,position:'top',labels:{color:textC,font:{size:11},boxWidth:8}}},scales:{x:{...base.scales.x,title:{display:true,text:'Frequency (Hz)',color:textC,font:{size:11}}},y:{...base.scales.y,title:{display:true,text:'Power (dB)',color:textC,font:{size:11}}}}}});
+})();
+
+/* ---- RMS bar ---- */
+(function(){
+  const files=['Faulty 1','Faulty 2','Faulty 3','Faulty 4','Normal 1','Normal 2','Normal 3'];
+  const vals=[0.714,0.703,0.709,0.887,0.018,0.022,0.886];
+  const cols=vals.map((_,i)=>i<4?RD:GR);
+  new Chart(document.getElementById('rmsBarChart'),{type:'bar',data:{labels:files,datasets:[{data:vals,backgroundColor:cols,borderRadius:4}]},options:{...base,scales:{x:{...base.scales.x},y:{...base.scales.y,title:{display:true,text:'RMS (m/s²)',color:textC,font:{size:11}},beginAtZero:true}}}});
+})();
+
+/* ---- Kurtosis trend ---- */
+(function(){
+  const segs=[...Array(30)].map((_,i)=>i+1);
+  const kv=segs.map((_,i)=>i<15?2.7+Math.random()*.4:3.8+Math.random()*.6);
+  new Chart(document.getElementById('kurtChart'),{type:'line',data:{labels:segs,datasets:[{label:'Kurtosis',data:kv,borderColor:AM,borderWidth:2,pointRadius:0,fill:true,backgroundColor:'rgba(239,159,39,0.1)',tension:0.4}]},options:{...base,scales:{x:{...base.scales.x,title:{display:true,text:'Segment',color:textC,font:{size:11}}},y:{...base.scales.y,title:{display:true,text:'Kurtosis',color:textC,font:{size:11}},min:2,max:5}}}});
+})();
+
+/* ---- Envelope spectrum ---- */
+(function(){
+  const f=[...Array(80)].map((_,i)=>i*2+2);
+  const amp=f.map(freq=>{
+    let v=Math.random()*.05;
+    if(Math.abs(freq-33)<1)v+=0.8;
+    if(Math.abs(freq-66)<1)v+=0.45;
+    if(Math.abs(freq-99)<1)v+=0.22;
+    return v;
+  });
+  new Chart(document.getElementById('envChart'),{type:'bar',data:{labels:f,datasets:[{data:amp,backgroundColor:BL+'aa',borderRadius:1}]},options:{...base,scales:{x:{...base.scales.x,title:{display:true,text:'Frequency (Hz)',color:textC,font:{size:11}},ticks:{maxTicksLimit:10}},y:{...base.scales.y,title:{display:true,text:'Amplitude',color:textC,font:{size:11}},beginAtZero:true}}}});
+})();
+
+/* ---- Feature importance bars ---- */
+(function(){
+  const fiData=[
+    {n:'RMS_Ch2',s:190.2},{n:'STD_Ch3',s:188.3},{n:'RMS_Ch3',s:188.1},
+    {n:'STD_Ch2',s:187.0},{n:'MF_Ch2',s:176.1},{n:'MF_Ch3',s:175.7},
+    {n:'RMSF_Ch2',s:168.5},{n:'VAR_Ch3',s:165.9},{n:'RMSF_Ch3',s:164.0},
+    {n:'VAR_Ch2',s:161.7},{n:'RMS_Ch1',s:144.3},{n:'STD_Ch1',s:143.8},
+    {n:'VARF_Ch2',s:138.2},{n:'STDF_Ch3',s:136.7},{n:'MF_Ch1',s:130.4}
+  ];
+  const max=190.2;const el=document.getElementById('featureImportanceContainer');
+  const cols=['#0F6E56','#0F6E56','#0F6E56','#0F6E56','#1D9E75','#1D9E75','#5DCAA5','#5DCAA5','#5DCAA5','#5DCAA5','#9FE1CB','#9FE1CB','#9FE1CB','#9FE1CB','#C0DD97'];
+  fiData.forEach((d,i)=>{const p=(d.s/max*100).toFixed(1);el.innerHTML+=`<div class="fi-row"><span class="fi-name">${d.n}</span><div class="fi-bar-bg"><div class="fi-bar-fill" style="width:${p}%;background:${cols[i]}"></div></div><span class="fi-score">${d.s.toFixed(0)}</span></div>`;});
+})();
+
+/* ---- Feature category ---- */
+(function(){
+  new Chart(document.getElementById('featCatChart2'),{type:'doughnut',data:{labels:['Time-domain (TD)','Frequency-domain (FD)'],datasets:[{data:[55,45],backgroundColor:[GR,BL],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{display:true,position:'bottom',labels:{color:textC,font:{size:11},boxWidth:10,padding:10}}}}});
+})();
+
+/* ---- Distribution histogram ---- */
+(function(){
+  const nVals=Array.from({length:100},()=>0.018+Math.random()*.01);
+  const fVals=Array.from({length:100},()=>0.68+Math.random()*.25);
+  const bins=Array.from({length:20},(_,i)=>+(i*.07).toFixed(2));
+  const nH=bins.map(b=>nVals.filter(v=>v>=b&&v<b+.07).length);
+  const fH=bins.map(b=>fVals.filter(v=>v>=b&&v<b+.07).length);
+  new Chart(document.getElementById('distChart2'),{type:'bar',data:{labels:bins,datasets:[{label:'Normal',data:nH,backgroundColor:GR+'99',borderRadius:2},{label:'Faulty',data:fH,backgroundColor:RD+'99',borderRadius:2}]},options:{...base,plugins:{legend:{display:true,position:'top',labels:{color:textC,font:{size:11},boxWidth:8}}},scales:{x:{...base.scales.x,title:{display:true,text:'RMS Ch2 value',color:textC,font:{size:11}}},y:{...base.scales.y,title:{display:true,text:'Count',color:textC,font:{size:11}}}}}});
+})();
+
+/* ---- ML table ---- */
+(function(){
+  const models=['ANN','SVM','Random Forest','KNN','Decision Tree'];
+  const cvA=[0.9978,1.0,1.0,0.9978,0.9935];
+  const tA=[1.0,1.0,1.0,0.9949,0.9747];
+  const pr=[1.0,1.0,1.0,1.0,0.970];
+  const rc=[1.0,1.0,1.0,0.992,0.992];
+  const f1=[1.0,1.0,1.0,0.996,0.981];
+  const t=document.getElementById('mlTable');
+  t.innerHTML='<thead><tr><th>Model</th><th>CV Acc</th><th>Test Acc</th><th>Precision</th><th>Recall</th><th>F1</th><th>Rank</th></tr></thead><tbody>'+
+  models.map((m,i)=>`<tr><td style="font-weight:500">${m}</td><td>${(cvA[i]*100).toFixed(2)}%</td><td>${(tA[i]*100).toFixed(2)}%</td><td>${pr[i].toFixed(3)}</td><td>${rc[i].toFixed(3)}</td><td>${f1[i].toFixed(3)}</td><td><span class="badge ${tA[i]>=1?'badge-healthy':'badge-info'}">${tA[i]>=1?'Best':'Good'}</span></td></tr>`).join('')+'</tbody>';
+})();
+
+/* ---- ML accuracy chart ---- */
+(function(){
+  const models=['ANN','SVM','RF','KNN','DT'];
+  const cvA=[99.78,100,100,99.78,99.35];
+  const tA=[100,100,100,99.49,97.47];
+  new Chart(document.getElementById('accChart2'),{type:'bar',data:{labels:models,datasets:[{label:'CV Accuracy',data:cvA,backgroundColor:BL+'88',borderRadius:3},{label:'Test Accuracy',data:tA,backgroundColor:GR,borderRadius:3}]},options:{...base,plugins:{legend:{display:true,position:'top',labels:{color:textC,font:{size:11},boxWidth:8}}},scales:{x:{...base.scales.x},y:{...base.scales.y,min:96,max:101,title:{display:true,text:'Accuracy (%)',color:textC,font:{size:11}}}}}});
+})();
+
+/* ---- Reference compare ---- */
+(function(){
+  const models=['ANN','SVM','KNN','DT','RF'];
+  const ref=[99.6,97.4,97.8,92.6,null];
+  const prop=[100,100,99.5,97.5,100];
+  new Chart(document.getElementById('compareChart2'),{type:'bar',data:{labels:models,datasets:[{label:'Reference (oil-lubricated)',data:ref,backgroundColor:BL+'88',borderRadius:3},{label:'Proposed (water-lubricated)',data:prop,backgroundColor:GR+'cc',borderRadius:3}]},options:{...base,plugins:{legend:{display:true,position:'top',labels:{color:textC,font:{size:11},boxWidth:8}}},scales:{x:{...base.scales.x},y:{...base.scales.y,min:88,max:102,title:{display:true,text:'Accuracy (%)',color:textC,font:{size:11}}}}}});
+})();
+
+/* ---- Wear comparison chart ---- */
+(function(){
+  const sensors=['P1','P2','P3','P4','P5','P6','P7'];
+  const before=[24,157,659,1304,700,300,100];
+  const after=[0,12,137,330,90,30,10];
+  new Chart(document.getElementById('wearChart'),{type:'bar',data:{labels:sensors,datasets:[{label:'Before wear',data:before,backgroundColor:GR+'cc',borderRadius:3},{label:'After wear',data:after,backgroundColor:RD+'cc',borderRadius:3}]},options:{...base,plugins:{legend:{display:true,position:'top',labels:{color:textC,font:{size:11},boxWidth:8}}},scales:{x:{...base.scales.x},y:{...base.scales.y,title:{display:true,text:'Pressure (kPa)',color:textC,font:{size:11}},beginAtZero:true}}}});
+})();
+
+/* ---- AI ASSISTANT ---- */
+async function askAI(){
+  const inp=document.getElementById('aiQuestion');
+  const q=inp.value.trim();
+  if(!q)return;
+  const hist=document.getElementById('chatHistory');
+  const spin=document.getElementById('aiSpinner');
+  
+  hist.innerHTML+=`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;align-self:flex-end;max-width:90%;font-size:13px"><strong>You:</strong> ${q}</div>`;
+  inp.value='';
+  spin.style.display='block';
+  hist.scrollTop=hist.scrollHeight;
+
+  const systemPrompt=`You are a senior tribology and rotordynamics engineer with expertise in hydrostatic journal bearings, water lubrication, and machine learning-based condition monitoring. You are helping analyze experimental results from a water-lubricated hydrostatic journal bearing test rig at VJTI Mumbai (KPCL R&D project). 
+
+Key context:
+- Bearing: 80×80mm cylindrical hole-entry hydrostatic bearing, 24 holes, SS304
+- Lubricant: Distilled water (μ=0.001 Pa·s, much lower than oil)
+- Supply pressure: 6-12 bar, Flow rate: 10.1-16 LPM
+- Speed range: 300-2500 rpm
+- Known issues: Misalignment (38% pressure difference between planes), Bush wear (pressure dropped from 1304→330 kPa), Cavitation at high speed, Film breakdown below 600 rpm
+- ML results: ANN/SVM/RF achieved 100% accuracy classifying normal vs faulty; 36 features (12 time + 12 freq × 3 axes); top features: RMS_Ch2, STD_Ch3, MF_Ch2
+- Maintenance recommendations involve replacing carbon bush with PTFE/PEEK, realignment, pocket-entry design upgrade
+
+Answer in 3-5 sentences, engineering-precise, cite relevant tribology principles where applicable.`;
+
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:systemPrompt,messages:[{role:'user',content:q}]})});
+    const data=await resp.json();
+    const ans=data.content?data.content.map(c=>c.text||'').join(''):'Unable to get a response. Please try again.';
+    hist.innerHTML+=`<div style="background:#f0fdf8;border:1px solid #9FE1CB;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.6"><div style="font-size:10px;font-weight:600;color:#0F6E56;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">AI Engineer</div>${ans}</div>`;
+  }catch(e){
+    hist.innerHTML+=`<div style="background:#FCEBEB;border:1px solid #F7C1C1;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D">Could not connect to AI service. Check API configuration.</div>`;
+  }
+  spin.style.display='none';
+  hist.scrollTop=hist.scrollHeight;
+}
+</script>
+</body>
+</html>
